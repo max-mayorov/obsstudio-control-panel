@@ -34,7 +34,10 @@ several browser tabs are views onto one shared piece of hardware, not independen
 | D4 | **OBS is the single source of truth; commands never write local state** | Store mutates only from OBS events + resync. Removes optimistic-state divergence entirely |
 | D5 | **Three-tier filename resolution with visible provenance** | Honest UI: never presents a guess as fact (§6) |
 | D6 | **Mock obs-websocket server ships with the repo** | App runs, demos and tests with zero OBS installed; lets us test auth failure, disconnects, scene creation |
-| D7 | TypeScript, Svelte 5 runes, Tailwind | Brief requires Tailwind; runes satisfy the state-management bonus |
+| D7 | TypeScript, Svelte 5 runes, Tailwind 4 (Vite plugin, CSS-first) | Brief requires Tailwind; runes satisfy the state-management bonus |
+| D8 | **Studio mode detected and honoured** | Off → click cuts to program. On → Preview/Program columns, click sets preview, explicit Transition. A control surface must never hard-cut live by surprise |
+| D9 | **Shared-secret auth via httpOnly cookie** (§8.1) | The app can stop someone's recording. Cookie, not header — see the `EventSource` constraint below |
+| D10 | **Pause/resume exposed** alongside start/stop | `outputPaused` has to be modelled for correct timecode anyway; exposing it closes a visible gap for ~20 lines |
 
 ## 3. Component map
 
@@ -125,6 +128,39 @@ Given §1.2–1.4, resolution is tiered, best source wins:
 3. **Final path on stop.** `StopRecord`'s response and `RecordStateChanged{OUTPUT_STOPPED}`
    both carry the true path → promoted to `lastCompleted`, always authoritative.
 
+**Caveat on tier 2 that tier 1 does not have:** token expansion uses the *OBS machine's* local
+clock and timezone. Our server may be in a container running UTC. The protocol exposes no way to
+read OBS's timezone, so a predicted name can be hours off. This is precisely why tier 2 is
+labelled, not presented as fact.
+
+### 6.1 Prescribing the filename instead of discovering it  **[?]**
+
+`StartRecord` accepts **no parameters** — there is no way to pass a filename with the start
+request. v4 had `SetFilenameFormatting` / `SetRecordingFolder`; v5 removed them in favour of the
+generic profile API (obs-websocket issue #1062). The equivalent is therefore:
+
+```
+SetProfileParameter('Output', 'FilenameFormatting', <name or template>)
+SetRecordDirectory(<dir>)          // optional
+StartRecord
+```
+
+This makes recordings *we* start deterministic — we know the name by construction, with no event
+and no guessing. It does **not** cover a recording already running when we connect, and it comes
+with real costs:
+
+- It **mutates the user's OBS profile**, persistently. Correct use requires reading the old value,
+  writing ours, and restoring it — with a defined answer for "restore when?" if we crash mid-record.
+- A literal (non-templated) name collides on the second recording; OBS then either overwrites or
+  appends a dedupe suffix depending on `Output/OverwriteIfExists` — so we would be wrong again
+  unless we keep a timestamp token, which reintroduces the clock-skew caveat above.
+- The container extension still comes from the recording-format profile parameter, not from
+  `FilenameFormatting`.
+
+Tier 1 already resolves the common case authoritatively on current OBS, so prescribing buys
+little as a *detection* mechanism. It is more interesting as an opt-in **feature** — "name this
+recording" — which is a separate decision, tracked in §13.
+
 ## 7. Real-time updates
 
 **Push (server→browser), two SSE event types:**
@@ -159,6 +195,9 @@ Missing an event while disconnected can therefore never leave stale state on scr
 | POST | `/api/recording/stop` | 200 `{outputPath}` | 409 not recording, 503 |
 | POST | `/api/recording/pause` `/resume` | 202 | 409 wrong state |
 | POST | `/api/scenes/current` `{name}` | 200 | 400 bad body, 404 unknown scene, 503 |
+| POST | `/api/scenes/preview` `{name}` | 200 | 409 studio mode off, 404 unknown scene |
+| POST | `/api/transition` | 202 | 409 studio mode off |
+| POST | `/api/session` `{token}` | 204 + `Set-Cookie` | 401 bad token |
 | GET | `/api/health` | 200 | — (container healthcheck) |
 
 Envelope: `{ok: true, data}` / `{ok: false, error: {code, message, requestId}}`.
@@ -170,6 +209,22 @@ socket down → 503 · auth rejected → 502 (operator misconfiguration, surface
 in the UI, never as a transient) · output already/not running → 409 · unknown scene → 404 ·
 schema violation → 400 · anything else from OBS → 502. Passwords are redacted from all logs and
 never appear in a response.
+
+### 8.1 Authentication
+
+A shared secret (`APP_TOKEN`) gates every `/api` route via a single `handle` hook in
+`hooks.server.ts`.
+
+**The mechanism is a cookie, not a header, and that is forced by the design:** `EventSource`
+exposes no API for request headers, so a `Authorization:`-style scheme cannot authenticate the
+SSE stream. Putting the token in the query string would leak it into access logs. So:
+`POST /api/session` exchanges the token for an httpOnly, `SameSite=Strict` cookie
+(`Secure` when served over TLS), which the browser then attaches to both `fetch` and
+`EventSource` automatically. Comparison is constant-time.
+
+If `APP_TOKEN` is unset the guard is disabled, a warning is logged at boot and the UI shows an
+"unauthenticated" banner — so a reviewer's first run needs no setup, while the mechanism is
+present and exercised by tests. Default bind is loopback.
 
 ## 9. Mock OBS (`tools/mock-obs`)
 
@@ -193,11 +248,13 @@ Container→OBS networking is the documented gotcha: macOS/Windows use
 ## 11. Testing
 
 - **Unit (vitest):** state reducer (event → snapshot transitions), filename token expansion,
-  error mapper. Pure functions, no I/O.
+  error mapper, constant-time token comparison. Pure functions, no I/O.
 - **Integration:** service + client against the mock over a real socket — exercises the whole
-  server stack including reconnect and auth failure.
+  server stack including reconnect, auth failure and mid-recording disconnect.
 
 ## 12. Open questions
 
-Tracked in chat; see §"Round 2" — studio mode support, app-level auth, Tailwind major version,
-and how far past the four required actions the record controls should go.
+- **Opt-in "name this recording"** (§6.1) — feature, or leave it out?
+- Whether `DESIGN.md` and `ASSIGNMENT.md` ship in the submitted repository.
+- Logger: `pino` + `pino-pretty` vs a ~40-line structured logger with no dependency.
+- CI workflow — out of the agreed scope, trivial to add later.

@@ -125,3 +125,25 @@ export interface SetSceneBody {
 export interface StopRecordingResult {
 	outputPath: string | null;
 }
+
+/**
+ * A snapshot representing "we know nothing yet", used before the server has connected
+ * and as the placeholder shown to a signed-out client.
+ */
+export function emptySnapshot(): ObsSnapshot {
+	return {
+		connection: { status: 'connecting', attempt: 0 },
+		recording: {
+			active: false,
+			paused: false,
+			timecode: '00:00:00.000',
+			durationMs: 0,
+			bytes: 0,
+			file: null,
+			lastCompleted: null,
+			directory: null
+		},
+		scenes: { scenes: [], program: null, preview: null, studioMode: false, stale: true },
+		serverTime: 0
+	};
+}

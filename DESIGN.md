@@ -179,9 +179,34 @@ returns the authoritative path on current builds, this buys nothing it does not 
   idempotent, self-healing, no patch-ordering bugs.
 - `tick` — `{timecode, durationMs, bytes}` only, 1 Hz, **only while recording is active**.
 
-**Timecode:** the server polls `GetRecordStatus` at 1 Hz while recording; the client interpolates
-between ticks from a monotonic base so the display moves smoothly without hammering OBS, and
-resyncs on every tick. Interpolation halts while `paused`.
+**Timecode: why a request loop on an event-driven connection.** The OBS connection is a single
+persistent websocket; this is one request message on it per second, not connection churn. Two
+findings force it:
+
+*There is no event to subscribe to.* Of the 59 events in the protocol, every output-related one
+is a state **transition** — `RecordStateChanged`, `RecordFileChanged`, `StreamStateChanged`,
+`ReplayBufferStateChanged`, `VirtualcamStateChanged`, `ReplayBufferSaved`. No progress or stats
+event exists; `outputTimecode` and `outputBytes` are `GetRecordStatus` response fields only.
+
+*Client-side extrapolation alone is wrong, not merely imprecise.* OBS derives the duration from
+frame count, not wall clock:
+
+```cpp
+// Utils::Obs::NumberHelper::GetOutputDuration
+uint64_t frameTimeNs = video_output_get_frame_time(video);
+int totalFrames = obs_output_get_total_frames(output);
+return util_mul_div64(totalFrames, frameTimeNs, 1000000ULL);
+```
+
+Under encoder overload or a disk stall OBS drops frames, and media time falls behind real time.
+A wall-clock timer would read `05:00` while the file is 4:52 — diverging precisely when the
+operator needs the truth. `outputBytes` has no client-side equivalent at all.
+
+So we do both, each for what it is good at: **1 Hz resync for truth, client interpolation from a
+monotonic base for smoothness**, resyncing every tick. Polling alone would need ~10 Hz to look
+smooth — 10× the traffic for a worse answer. Interpolation halts while `paused`.
+`OBS_POLL_INTERVAL_MS` is configurable; `0` disables the loop and falls back to pure
+extrapolation.
 
 **Idle cost is zero:** the poll ticker runs only when a recording is active *and* at least one
 SSE subscriber is attached.

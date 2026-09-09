@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind 4 is configured in CSS rather than a JS config file. These tokens are the
+ * whole palette: a dark control-room surface where red means "recording" and nothing
+ * else in the UI is allowed to use it.
+ */
+@theme {
+	--color-canvas: oklch(0.17 0.012 265);
+	--color-panel: oklch(0.22 0.014 265);
+	--color-raised: oklch(0.27 0.015 265);
+	--color-edge: oklch(0.33 0.016 265);
+
+	--color-ink: oklch(0.97 0.004 265);
+	--color-muted: oklch(0.73 0.012 265);
+	--color-faint: oklch(0.56 0.012 265);
+
+	--color-live: oklch(0.62 0.215 25);
+	--color-live-dim: oklch(0.42 0.13 25);
+	--color-good: oklch(0.75 0.17 155);
+	--color-warn: oklch(0.82 0.15 85);
+	--color-info: oklch(0.7 0.14 245);
+
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+html {
+	background-color: var(--color-canvas);
+	color-scheme: dark;
+}
+
+/* Visible focus for keyboard users on every interactive element. */
+:where(button, a, select, input, [tabindex]):focus-visible {
+	outline: 2px solid var(--color-info);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

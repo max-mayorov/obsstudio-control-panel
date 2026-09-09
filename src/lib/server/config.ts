@@ -39,10 +39,24 @@ function integer(env: NodeJS.ProcessEnv, key: string, fallback: number, min = 0)
 	return value;
 }
 
+const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
+
 /** Normalises a host:port or bare URL into a `ws://` URL OBS will accept. */
 function obsUrl(env: NodeJS.ProcessEnv): string {
 	const raw = (env.OBS_URL ?? 'ws://127.0.0.1:4455').trim();
-	const candidate = /^wss?:\/\//i.test(raw) ? raw : `ws://${raw}`;
+
+	// A wrong scheme has to be caught here. Prefixing `ws://` onto something that
+	// already carries one produces a URL that parses cleanly and connects nowhere:
+	// `http://obs.local` would silently become `ws://http://obs.local`.
+	const scheme = SCHEME.exec(raw)?.[1]?.toLowerCase();
+	if (scheme && scheme !== 'ws' && scheme !== 'wss') {
+		throw new ConfigError(
+			`OBS_URL must use ws:// or wss://, received ${scheme}://. ` +
+				'obs-websocket is a websocket server, not an HTTP one.'
+		);
+	}
+
+	const candidate = scheme ? raw : `ws://${raw}`;
 
 	let parsed: URL;
 	try {

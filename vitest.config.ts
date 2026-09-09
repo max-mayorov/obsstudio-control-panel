@@ -12,6 +12,8 @@ export default defineConfig({
 	test: {
 		include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
 		environment: 'node',
-		testTimeout: 15_000
+		testTimeout: 15_000,
+		// Keep test output to test results; the logger is exercised, just not printed.
+		env: { LOG_LEVEL: 'silent' }
 	}
 });

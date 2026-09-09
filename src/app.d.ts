@@ -1,12 +1,12 @@
-// See https://svelte.dev/docs/kit/types#app.d.ts
-// for information about these interfaces
 declare global {
 	namespace App {
-		// interface Error {}
-		// interface Locals {}
-		// interface PageData {}
-		// interface PageState {}
-		// interface Platform {}
+		interface Locals {
+			/** Correlates a client-visible error with the server log line that explains it. */
+			requestId: string;
+			/** True when APP_TOKEN is configured and the API therefore requires a session. */
+			authRequired: boolean;
+			authenticated: boolean;
+		}
 	}
 }
 

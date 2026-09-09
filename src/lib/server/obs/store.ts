@@ -83,6 +83,19 @@ export class ObsStore {
 		};
 	}
 
+	/**
+	 * Samples the recording numbers once, on demand.
+	 *
+	 * The heartbeat only runs for stream subscribers, so a client polling `/api/state`
+	 * would otherwise read a timecode frozen at whatever the last stream update left
+	 * behind. One sample per poll is exactly what such a client is asking for.
+	 */
+	async refreshRecording(): Promise<void> {
+		if (!this.snapshot.recording.active) return;
+		if (this.snapshot.connection.status !== 'connected') return;
+		await this.tick();
+	}
+
 	start(): void {
 		if (this.started) return;
 		this.started = true;

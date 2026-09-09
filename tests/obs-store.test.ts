@@ -89,23 +89,23 @@ describe('ObsStore', () => {
 	});
 
 	it('predicts the filename for a recording that was already running when we connected', async () => {
-		server = new MockObsServer({ port: 0 });
-		const port = await server.start();
+		const mock = (server = new MockObsServer({ port: 0 }));
+		const port = await mock.start();
 		// The recording starts before anything connects, so the event carrying its path
 		// is gone by the time the store exists. This is the case no request can recover.
-		server.state.startRecording();
+		mock.state.startRecording();
 
-		client = new ObsClient({
+		const obsClient = (client = new ObsClient({
 			url: `ws://127.0.0.1:${port}`,
 			reconnect: { initialDelayMs: 50, maxDelayMs: 150 }
-		});
-		store = new ObsStore(client, POLL_MS);
-		store.start();
-		client.start();
+		}));
+		const obsStore = (store = new ObsStore(obsClient, POLL_MS));
+		obsStore.start();
+		obsClient.start();
 
-		await waitFor(() => store!.getSnapshot().recording.active, {}, 'recording state');
+		await waitFor(() => obsStore.getSnapshot().recording.active, {}, 'recording state');
 
-		const { file } = store.getSnapshot().recording;
+		const { file } = obsStore.getSnapshot().recording;
 		expect(file?.source).toBe('predicted');
 		expect(file?.path).toMatch(/\.mkv$/);
 	});
@@ -190,24 +190,24 @@ describe('ObsStore', () => {
 	});
 
 	it('never samples at all when the heartbeat is disabled', async () => {
-		server = new MockObsServer({ port: 0 });
-		const port = await server.start();
-		client = new ObsClient({
+		const mock = (server = new MockObsServer({ port: 0 }));
+		const port = await mock.start();
+		const obsClient = (client = new ObsClient({
 			url: `ws://127.0.0.1:${port}`,
 			reconnect: { initialDelayMs: 50, maxDelayMs: 150 }
-		});
-		store = new ObsStore(client, 0); // OBS_POLL_INTERVAL_MS=0
-		store.start();
-		client.start();
-		await waitFor(() => store!.getSnapshot().connection.status === 'connected', {}, 'connect');
+		}));
+		const obsStore = (store = new ObsStore(obsClient, 0)); // OBS_POLL_INTERVAL_MS=0
+		obsStore.start();
+		obsClient.start();
+		await waitFor(() => obsStore.getSnapshot().connection.status === 'connected', {}, 'connect');
 
-		const sink = collect(store);
-		server.apply(() => server.state.startRecording());
-		await waitFor(() => store!.getSnapshot().recording.active, {}, 'recording');
-		server.resetCounts();
+		const sink = collect(obsStore);
+		mock.apply(() => mock.state.startRecording());
+		await waitFor(() => obsStore.getSnapshot().recording.active, {}, 'recording');
+		mock.resetCounts();
 		await new Promise((resolve) => setTimeout(resolve, 200));
 
-		expect(server.countOf('GetRecordStatus')).toBe(0);
+		expect(mock.countOf('GetRecordStatus')).toBe(0);
 		expect(sink.ticks).toHaveLength(0);
 		sink.unsubscribe();
 	});

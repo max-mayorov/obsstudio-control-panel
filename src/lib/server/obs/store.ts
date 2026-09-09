@@ -162,34 +162,74 @@ export class ObsStore {
 	}
 
 	/**
-	 * Re-reads everything after a (re)connection. Any event missed while disconnected is
-	 * therefore corrected here, which is why the store never needs to detect gaps.
+	 * Re-reads everything after a (re)connection, then publishes it as a single snapshot.
+	 *
+	 * Any event missed while disconnected is corrected here, which is why the store never
+	 * needs to detect gaps. Patching once rather than per-response matters: a partial
+	 * resync would otherwise be visible to subscribers — a scene list already refreshed
+	 * while the record directory was still null — and would cost three stream frames
+	 * where one will do.
 	 */
 	private async resync(): Promise<void> {
 		try {
-			await Promise.all([this.resyncScenes(), this.resyncProfile()]);
-			await this.resyncRecording();
+			const [scenes, profile, status] = await Promise.all([
+				this.fetchScenes(),
+				this.fetchProfile(),
+				this.client.call('GetRecordStatus')
+			]);
+
+			this.profile = profile;
+
+			// A recording already running when we connected has lost the only message
+			// that carried its path, so predict one and mark it as predicted.
+			let file = this.snapshot.recording.file;
+			if (status.outputActive && !file) {
+				file = predictedFile(profile, new Date(Date.now() - status.outputDuration));
+				if (file) log.info({ path: file.path }, 'predicted filename for a running recording');
+			} else if (!status.outputActive) {
+				file = null;
+			}
+
+			this.patch({
+				scenes,
+				recording: {
+					...this.snapshot.recording,
+					directory: profile.directory,
+					active: status.outputActive,
+					paused: status.outputPaused,
+					timecode: status.outputTimecode,
+					durationMs: status.outputDuration,
+					bytes: status.outputBytes,
+					file
+				}
+			});
+
+			this.updateTicker();
 			log.debug('resynced OBS state');
 		} catch (error) {
 			log.warn({ err: error }, 'resync failed; will retry on next connection');
 		}
 	}
 
-	private async resyncScenes(): Promise<void> {
+	private async fetchScenes(): Promise<ObsSnapshot['scenes']> {
 		const [list, studio] = await Promise.all([
 			this.client.call('GetSceneList'),
 			this.client.call('GetStudioModeEnabled')
 		]);
-		this.patchScenes({
+		return {
 			scenes: toSceneSummaries(list.scenes),
 			program: list.currentProgramSceneName || null,
 			preview: studio.studioModeEnabled ? list.currentPreviewSceneName || null : null,
 			studioMode: studio.studioModeEnabled,
 			stale: false
-		});
+		};
 	}
 
-	private async resyncProfile(): Promise<void> {
+	private async resyncScenes(): Promise<void> {
+		this.patchScenes(await this.fetchScenes());
+	}
+
+	private async fetchProfile(): Promise<RecordingPathSources> {
 		const directory = await this.client
 			.call('GetRecordDirectory')
 			.then((response) => response.recordDirectory)
@@ -203,8 +243,7 @@ export class ObsStore {
 			'RecFormat2'
 		);
 
-		this.profile = { directory, template, extension };
-		this.patchRecording({ directory });
+		return { directory, template, extension };
 	}
 
 	private async profileParameter(category: string, name: string): Promise<string | null> {

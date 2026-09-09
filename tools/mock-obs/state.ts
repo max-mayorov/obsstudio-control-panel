@@ -74,6 +74,9 @@ export class MockObsState {
 	readonly obsWebSocketVersion: string;
 	readonly omitOutputPathOnStart: boolean;
 
+	/** Paths handed out this session, so a split never reuses the current filename. */
+	private readonly usedPaths = new Set<string>();
+
 	private recordDirectory: string;
 	private filenameFormatting: string;
 	private recordFormat: string;
@@ -247,13 +250,29 @@ export class MockObsState {
 		};
 	}
 
+	/**
+	 * Generates the next recording path, de-duplicating against paths already used this
+	 * session. The default template is only second-granular, so a file split within the
+	 * same second would otherwise reuse the name of the file still being written. Real
+	 * OBS avoids the collision too (unless `Output/OverwriteIfExists` is set); the exact
+	 * suffix it picks is not what we are modelling, only that the path is distinct.
+	 */
 	private newRecordingPath(): string {
-		return buildRecordingPath({
+		const base = buildRecordingPath({
 			directory: this.recordDirectory,
 			template: this.filenameFormatting,
 			extension: this.recordFormat,
 			at: new Date(this.now())
 		});
+
+		let candidate = base;
+		let suffix = 1;
+		while (this.usedPaths.has(candidate)) {
+			suffix += 1;
+			candidate = base.replace(/(\.[^.]+)$/, ` (${suffix})$1`);
+		}
+		this.usedPaths.add(candidate);
+		return candidate;
 	}
 
 	startRecording(): MockEvent[] {

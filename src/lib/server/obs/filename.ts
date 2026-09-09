@@ -136,3 +136,32 @@ export function buildRecordingPath(options: {
 	const name = expandFilenameTemplate(options.template, options.at);
 	return joinRecordPath(options.directory, `${name}.${options.extension}`);
 }
+
+/** Profile values needed to reconstruct a filename OBS did not tell us. */
+export interface RecordingPathSources {
+	directory: string | null;
+	template: string | null;
+	extension: string | null;
+}
+
+/**
+ * Reconstructs the path of a recording already in progress.
+ *
+ * Only reached when OBS did not report the path itself — we connected after the
+ * recording started, so the one event that carried it is gone. Returns null rather than
+ * a partial guess when the profile values needed are missing: no filename is better
+ * than a wrong one presented as fact.
+ */
+export function predictRecordingPath(
+	sources: RecordingPathSources,
+	startedAt: Date
+): string | null {
+	if (!sources.directory || !sources.template) return null;
+	return buildRecordingPath({
+		directory: sources.directory,
+		template: sources.template,
+		// OBS falls back to mkv when the profile does not name a container.
+		extension: sources.extension ?? 'mkv',
+		at: startedAt
+	});
+}

@@ -58,6 +58,13 @@ export class MockObsServer {
 	private server: WebSocketServer | undefined;
 	private readonly sessions = new Set<Session>();
 
+	/**
+	 * How many times each request type has been received. Lets tests assert on traffic
+	 * rather than on timing — notably that the recording heartbeat stops when nobody is
+	 * watching.
+	 */
+	readonly requestCounts = new Map<string, number>();
+
 	constructor(options: MockServerOptions = {}) {
 		this.options = options;
 		this.state = new MockObsState(options);
@@ -98,6 +105,15 @@ export class MockObsServer {
 		if (!server) return;
 		this.server = undefined;
 		await new Promise<void>((resolve) => server.close(() => resolve()));
+	}
+
+	/** How many times `requestType` has been received since start or the last reset. */
+	countOf(requestType: string): number {
+		return this.requestCounts.get(requestType) ?? 0;
+	}
+
+	resetCounts(): void {
+		this.requestCounts.clear();
 	}
 
 	/** Number of clients that have completed identification. */
@@ -224,6 +240,7 @@ export class MockObsServer {
 		const requestType = String(data.requestType ?? '');
 		const requestId = String(data.requestId ?? '');
 		const requestData = (data.requestData ?? {}) as Record<string, unknown>;
+		this.requestCounts.set(requestType, (this.requestCounts.get(requestType) ?? 0) + 1);
 
 		try {
 			const { responseData, events } = this.dispatch(requestType, requestData);

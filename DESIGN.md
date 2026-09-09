@@ -12,30 +12,30 @@ Four properties of the obs-websocket v5 protocol drove most of what follows:
 3. **The path arrives as an event, once.** Current obs-websocket emits `outputPath` on
    `RecordStateChanged` for both `OUTPUT_STARTED` and `OUTPUT_STOPPED`
    (`EventHandler_Outputs.cpp` calls `GetLastRecordFileName()` for both states). The published
-   protocol docs still say *"if record stopped, `null` otherwise"* — the docs are stale relative
+   protocol docs still say _"if record stopped, `null` otherwise"_ — the docs are stale relative
    to the source, and older builds behave as documented.
    `RecordFileChanged.newOutputPath` (obs-websocket ≥ 5.5.0) covers mid-recording file splits.
 4. **Therefore: connecting while a recording is already running means the filename is
    unrecoverable** — the only message that carried it has been and gone. This needs a fallback
    (§7), not a bug report.
 
-A single connection to OBS also means the *server*, not the browser, must own the session:
+A single connection to OBS also means the _server_, not the browser, must own the session:
 several browser tabs are views onto one piece of hardware, not independent clients.
 
 ## 2. Decisions
 
-| # | Decision | Rationale |
-|---|---|---|
-| D1 | **Server owns one OBS connection**, configured by env vars | Password never reaches the browser; one socket regardless of tab count; reconnect logic in one place |
-| D2 | **Fullstack SvelteKit + `adapter-node`** (SSR, not SPA) | Brief asks for API routes in SvelteKit; SSR renders first paint with real OBS state, so no "disconnected" flash |
-| D3 | **SSE server→browser, POST browser→server** | One-way push is all we need; `EventSource` reconnects natively; no custom WS server alongside Vite |
-| D4 | **OBS is the single source of truth; commands never write local state** | Store mutates only from OBS events + resync. Eliminates optimistic-state divergence |
-| D5 | **Three-tier filename resolution with visible provenance** | Never presents a guess as fact (§7) |
-| D6 | **Mock obs-websocket server ships with the repo** | Runs, demos and tests with zero OBS installed; makes auth failure, disconnects and scene creation reproducible |
-| D7 | TypeScript, Svelte 5 runes, Tailwind 4 (Vite plugin, CSS-first) | Brief requires Tailwind; runes satisfy the state-management bonus |
-| D8 | **Studio mode detected and honoured** | Off → click cuts to program. On → Preview/Program columns, click sets preview, explicit Transition. A control surface must never hard-cut live by surprise |
-| D9 | **Shared-secret auth via httpOnly cookie** | The app can stop someone's recording. Cookie, not header — forced by `EventSource` (§10.1) |
-| D10 | **Pause/resume exposed** alongside start/stop | `outputPaused` must be modelled for correct timecode anyway; exposing it closes a visible gap cheaply |
+| #   | Decision                                                                | Rationale                                                                                                                                                  |
+| --- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **Server owns one OBS connection**, configured by env vars              | Password never reaches the browser; one socket regardless of tab count; reconnect logic in one place                                                       |
+| D2  | **Fullstack SvelteKit + `adapter-node`** (SSR, not SPA)                 | Brief asks for API routes in SvelteKit; SSR renders first paint with real OBS state, so no "disconnected" flash                                            |
+| D3  | **SSE server→browser, POST browser→server**                             | One-way push is all we need; `EventSource` reconnects natively; no custom WS server alongside Vite                                                         |
+| D4  | **OBS is the single source of truth; commands never write local state** | Store mutates only from OBS events + resync. Eliminates optimistic-state divergence                                                                        |
+| D5  | **Three-tier filename resolution with visible provenance**              | Never presents a guess as fact (§7)                                                                                                                        |
+| D6  | **Mock obs-websocket server ships with the repo**                       | Runs, demos and tests with zero OBS installed; makes auth failure, disconnects and scene creation reproducible                                             |
+| D7  | TypeScript, Svelte 5 runes, Tailwind 4 (Vite plugin, CSS-first)         | Brief requires Tailwind; runes satisfy the state-management bonus                                                                                          |
+| D8  | **Studio mode detected and honoured**                                   | Off → click cuts to program. On → Preview/Program columns, click sets preview, explicit Transition. A control surface must never hard-cut live by surprise |
+| D9  | **Shared-secret auth via httpOnly cookie**                              | The app can stop someone's recording. Cookie, not header — forced by `EventSource` (§10.1)                                                                 |
+| D10 | **Pause/resume exposed** alongside start/stop                           | `outputPaused` must be modelled for correct timecode anyway; exposing it closes a visible gap cheaply                                                      |
 
 ## 3. Component map
 
@@ -83,7 +83,7 @@ These rules are what keep the thing testable:
 - **Only `store.ts` knows the state shape.** Both the SSE stream and the SSR `load` read from
   it, so page-load state and streamed state cannot drift apart.
 - **Commands do not mutate the store** (D4). `POST /api/recording/start` issues `StartRecord`
-  and returns; the UI updates when OBS emits `RecordStateChanged`. Per-button *pending* state is
+  and returns; the UI updates when OBS emits `RecordStateChanged`. Per-button _pending_ state is
   client-local and clears on the next snapshot.
 
 ## 5. Dependencies
@@ -94,13 +94,13 @@ needs a build recent enough to populate `outputPath` on start; older builds degr
 
 **Packages** — one runtime dependency of substance:
 
-| Package | Role |
-|---|---|
-| `obs-websocket-js` ^5 | OBS protocol client. The *only* non-framework runtime dependency |
-| `@sveltejs/kit`, `svelte` ^5, `@sveltejs/adapter-node` | Framework + Node deployment target |
-| `tailwindcss` ^4, `@tailwindcss/vite` | Styling (required by the brief) |
-| `typescript`, `vite`, `vitest` | Build and test |
-| `ws` *(dev only)* | Mock OBS server |
+| Package                                                | Role                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `obs-websocket-js` ^5                                  | OBS protocol client. The _only_ non-framework runtime dependency                                                   |
+| `@sveltejs/kit`, `svelte` ^5, `@sveltejs/adapter-node` | Framework + Node deployment target                                                                                 |
+| `tailwindcss` ^4, `@tailwindcss/vite`                  | Styling (required by the brief)                                                                                    |
+| `typescript`, `vite`, `vitest`                         | Build and test                                                                                                     |
+| `ws`, `@msgpack/msgpack` _(dev only)_                  | Mock OBS server. Both subprotocols, because obs-websocket-js resolves its default Node import to the msgpack build |
 
 **Internal import direction** — strictly one-way, no cycles:
 
@@ -118,22 +118,27 @@ sides so a shape change breaks the build rather than the runtime.
 
 ```ts
 type ConnectionState =
-  | { status: 'connecting'; attempt: number }
-  | { status: 'connected'; obsVersion: string; rpcVersion: number }
-  | { status: 'reconnecting'; attempt: number; retryInMs: number; lastError: string }
-  | { status: 'error'; kind: 'auth' | 'unreachable'; message: string };
+	| { status: 'connecting'; attempt: number }
+	| { status: 'connected'; obsVersion: string; rpcVersion: number }
+	| { status: 'reconnecting'; attempt: number; retryInMs: number; lastError: string }
+	| { status: 'error'; kind: 'auth' | 'unreachable'; message: string };
 
 type RecordingState = {
-  active: boolean; paused: boolean;
-  timecode: string; durationMs: number; bytes: number;
-  file: { path: string; source: 'obs' | 'predicted' } | null;
-  lastCompleted: { path: string; endedAt: number } | null;
+	active: boolean;
+	paused: boolean;
+	timecode: string;
+	durationMs: number;
+	bytes: number;
+	file: { path: string; source: 'obs' | 'predicted' } | null;
+	lastCompleted: { path: string; endedAt: number } | null;
 };
 
 type ScenesState = {
-  scenes: { name: string; uuid: string }[];
-  program: string | null; preview: string | null; studioMode: boolean;
-  stale: boolean;   // true while disconnected — UI greys out but keeps last known
+	scenes: { name: string; uuid: string }[];
+	program: string | null;
+	preview: string | null;
+	studioMode: boolean;
+	stale: boolean; // true while disconnected — UI greys out but keeps last known
 };
 ```
 
@@ -151,7 +156,7 @@ Given §1.2–1.4, resolution is tiered and best-source-wins:
    `GetProfileParameter('Output','FilenameFormatting')`, expand the `%CCYY-%MM-%DD %hh-%mm-%ss`
    tokens against the recording start time (`now − outputDuration`), append the container
    extension from the profile. Badged **predicted**, because dedupe suffixes and remuxing can
-   make it wrong — and because token expansion uses the *OBS machine's* clock and timezone,
+   make it wrong — and because token expansion uses the _OBS machine's_ clock and timezone,
    which the protocol does not expose and which our container may not share.
 3. **Final path on stop.** `StopRecord`'s response and `RecordStateChanged{OUTPUT_STOPPED}` both
    carry the true path → promoted to `lastCompleted`, always authoritative.
@@ -165,7 +170,7 @@ no parameters. The equivalent today is to write the profile before starting:
 SetProfileParameter('Output', 'FilenameFormatting', <name>) ; StartRecord
 ```
 
-Rejected. It makes only *our own* starts deterministic — the mid-recording-connect case in §1.4
+Rejected. It makes only _our own_ starts deterministic — the mid-recording-connect case in §1.4
 is untouched — while adding a persistent mutation of the user's OBS profile that must be read,
 overwritten and restored, with an undefined answer for "restore when?" if the process dies
 mid-recording. A literal name also collides on the second recording, resolved by OBS as an
@@ -175,6 +180,7 @@ returns the authoritative path on current builds, this buys nothing it does not 
 ## 8. Real-time updates
 
 **Two SSE event types:**
+
 - `state` — full snapshot on any change. Snapshots are <1 KB, so full-state beats patches:
   idempotent, self-healing, no patch-ordering bugs.
 - `tick` — `{timecode, durationMs, bytes}` only, 1 Hz, **only while recording is active**.
@@ -183,12 +189,12 @@ returns the authoritative path on current builds, this buys nothing it does not 
 persistent websocket; this is one request message on it per second, not connection churn. Two
 findings force it:
 
-*There is no event to subscribe to.* Of the 59 events in the protocol, every output-related one
+_There is no event to subscribe to._ Of the 59 events in the protocol, every output-related one
 is a state **transition** — `RecordStateChanged`, `RecordFileChanged`, `StreamStateChanged`,
 `ReplayBufferStateChanged`, `VirtualcamStateChanged`, `ReplayBufferSaved`. No progress or stats
 event exists; `outputTimecode` and `outputBytes` are `GetRecordStatus` response fields only.
 
-*Client-side extrapolation alone is wrong, not merely imprecise.* OBS derives the duration from
+_Client-side extrapolation alone is wrong, not merely imprecise._ OBS derives the duration from
 frame count, not wall clock:
 
 ```cpp
@@ -208,7 +214,7 @@ smooth — 10× the traffic for a worse answer. Interpolation halts while `pause
 `OBS_POLL_INTERVAL_MS` is configurable; `0` disables the loop and falls back to pure
 extrapolation.
 
-**Idle cost is zero:** the poll ticker runs only when a recording is active *and* at least one
+**Idle cost is zero:** the poll ticker runs only when a recording is active _and_ at least one
 SSE subscriber is attached.
 
 **Scenes need no polling.** `SceneListChanged`, `SceneCreated`, `SceneRemoved`,
@@ -226,23 +232,23 @@ Events missed while disconnected therefore cannot leave stale state on screen.
 Module-level singleton, guarded against Vite HMR duplication. Started from the `init` hook so
 state is warm before the first request. Reconnect uses exponential backoff with jitter, capped
 at 15 s, retrying indefinitely — an operator restarting OBS should see the UI recover on its
-own. Auth rejection is *terminal*, not retried: it is a configuration error, and hammering a
+own. Auth rejection is _terminal_, not retried: it is a configuration error, and hammering a
 rejecting server achieves nothing. The UI distinguishes the two.
 
 ## 10. HTTP surface
 
-| Method | Path | Success | Failure modes |
-|---|---|---|---|
-| GET | `/api/state` | 200 snapshot | 503 never connected |
-| GET | `/api/state/stream` | 200 SSE | — |
-| POST | `/api/recording/start` | 202 | 409 already recording, 503 OBS down |
-| POST | `/api/recording/stop` | 200 `{outputPath}` | 409 not recording, 503 |
-| POST | `/api/recording/pause` · `/resume` | 202 | 409 wrong state |
-| POST | `/api/scenes/current` `{name}` | 200 | 400 bad body, 404 unknown scene, 503 |
-| POST | `/api/scenes/preview` `{name}` | 200 | 409 studio mode off, 404 unknown scene |
-| POST | `/api/transition` | 202 | 409 studio mode off |
-| POST | `/api/session` `{token}` | 204 + `Set-Cookie` | 401 bad token |
-| GET | `/api/health` | 200 | — (container healthcheck) |
+| Method | Path                               | Success            | Failure modes                          |
+| ------ | ---------------------------------- | ------------------ | -------------------------------------- |
+| GET    | `/api/state`                       | 200 snapshot       | 503 never connected                    |
+| GET    | `/api/state/stream`                | 200 SSE            | —                                      |
+| POST   | `/api/recording/start`             | 202                | 409 already recording, 503 OBS down    |
+| POST   | `/api/recording/stop`              | 200 `{outputPath}` | 409 not recording, 503                 |
+| POST   | `/api/recording/pause` · `/resume` | 202                | 409 wrong state                        |
+| POST   | `/api/scenes/current` `{name}`     | 200                | 400 bad body, 404 unknown scene, 503   |
+| POST   | `/api/scenes/preview` `{name}`     | 200                | 409 studio mode off, 404 unknown scene |
+| POST   | `/api/transition`                  | 202                | 409 studio mode off                    |
+| POST   | `/api/session` `{token}`           | 204 + `Set-Cookie` | 401 bad token                          |
+| GET    | `/api/health`                      | 200                | — (container healthcheck)              |
 
 Envelope: `{ok: true, data}` / `{ok: false, error: {code, message, requestId}}`. The `requestId`
 is logged server-side and shown in the toast, so any UI error traces to a log line.
@@ -270,17 +276,25 @@ tests. Default bind is loopback.
 ## 11. Mock OBS (`tools/mock-obs`)
 
 A `ws` server speaking the v5 handshake (Hello → Identify → Identified, including the sha256
-auth challenge) and the ~14 requests/events this app uses. Scriptable over a small control
-endpoint, to drive the cases real OBS makes painful to reproduce: wrong password · unreachable
-server · disconnect mid-recording · a scene created in OBS while the UI is open · a file split ·
-an OBS build that omits `outputPath` on start, exercising tier 2. Doubles as the integration-test
-fixture and lets a reviewer run everything with no OBS installed.
+auth challenge) and the requests and events this app uses. It negotiates **both** subprotocols:
+obs-websocket-js resolves its default Node import to the msgpack build and aborts a handshake
+that comes back without a matching subprotocol, so a JSON-only mock cannot be connected to at all.
+
+Driven by typed commands on stdin — no control port to secure or document — which makes the cases
+real OBS makes painful to reproduce into one line each: wrong password · unreachable server ·
+disconnect mid-recording · a scene created in OBS while the UI is open · a file split · dropped
+frames, so media time falls behind wall clock · an OBS build that omits `outputPath` on start,
+exercising tier 2. Doubles as the integration-test fixture, and lets a reviewer run the whole app
+with no OBS installed.
 
 ## 12. Packaging
 
-Multi-stage Dockerfile (build → prune → `node:22-alpine`, non-root, HEALTHCHECK on
-`/api/health`). `docker-compose.yml` carries a `mock` profile, so `docker compose --profile mock
-up` demonstrates the app end-to-end without OBS.
+Multi-stage Dockerfile: a build stage that compiles, and a `node:22-alpine` runtime stage that
+installs production dependencies only, runs as a non-root user and carries a HEALTHCHECK on
+`/api/health`. The build toolchain and the mock's dependencies never reach the final image.
+
+`docker-compose.yml` carries a `mock` profile, so `docker compose --profile mock up` runs the app
+against the mock — the whole thing demonstrable with neither OBS nor Node installed.
 
 Container→OBS networking is the documented gotcha: macOS/Windows use
 `OBS_URL=ws://host.docker.internal:4455`; Linux needs
@@ -301,5 +315,5 @@ Container→OBS networking is the documented gotcha: macOS/Windows use
   boundary. Badged accordingly.
 - The shared secret is a single static token with no user model, rotation or rate limiting —
   appropriate for a LAN control surface, not for exposure to the internet.
-- Recording controls act on OBS's *current* profile; changing profile in OBS mid-session
+- Recording controls act on OBS's _current_ profile; changing profile in OBS mid-session
   re-syncs state but is not otherwise modelled.

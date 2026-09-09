@@ -1,0 +1,55 @@
+# Two ways to run this:
+#
+#   docker compose up                     against OBS on your own machine
+#   docker compose --profile mock up      against the bundled mock, no OBS needed
+#
+# Reaching OBS on the host is the part that catches people out. On macOS and Windows,
+# host.docker.internal resolves by itself. On Linux it does not, so the extra_hosts entry
+# below maps it to the host gateway.
+
+x-app-environment: &app-environment
+  HOST: 0.0.0.0
+  PORT: 3000
+  # Leave APP_TOKEN empty and the API is unauthenticated — fine on a laptop, not on a
+  # shared network. See the README's security note.
+  APP_TOKEN: ${APP_TOKEN:-}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  OBS_POLL_INTERVAL_MS: ${OBS_POLL_INTERVAL_MS:-1000}
+
+services:
+  app:
+    build: .
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      <<: *app-environment
+      OBS_URL: ${OBS_URL:-ws://host.docker.internal:4455}
+      OBS_PASSWORD: ${OBS_PASSWORD:-}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped
+
+  # --- demo profile: app + mock OBS, so the whole thing runs with nothing installed ---
+  app-mock:
+    build: .
+    profiles: ['mock']
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      <<: *app-environment
+      OBS_URL: ws://mock:4455
+    depends_on:
+      - mock
+
+  mock:
+    build:
+      context: .
+      # The build stage still has the dev dependencies the mock needs.
+      target: build
+    profiles: ['mock']
+    command: npm run mock
+    environment:
+      MOCK_OBS_HOST: 0.0.0.0
+      MOCK_OBS_PORT: 4455
+    expose:
+      - '4455'

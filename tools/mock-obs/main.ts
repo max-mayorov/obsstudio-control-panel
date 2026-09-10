@@ -44,33 +44,44 @@ if (process.env.MOCK_OMIT_OUTPUT_PATH === '1') {
 }
 console.log(`\n${HELP}\n`);
 
-// Only take over stdin when there is a terminal attached. Under Docker or a pipe,
-// readline would see EOF immediately and shut the server down on startup; the listening
-// socket keeps the process alive on its own.
-if (process.stdin.isTTY) {
-	const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'mock> ' });
+// Commands are accepted from a terminal or a pipe, so the mock can be scripted as well
+// as driven by hand. Only an interactive session treats end-of-input as "shut down":
+// under Docker stdin is closed immediately, and the listening socket is what keeps the
+// process alive.
+const interactive = process.stdin.isTTY === true;
+
+const rl = createInterface({
+	input: process.stdin,
+	output: interactive ? process.stdout : undefined,
+	prompt: interactive ? 'mock> ' : ''
+});
+
+if (interactive) {
 	rl.prompt();
-
-	rl.on('line', (line) => {
-		const [command, ...args] = line.trim().split(/\s+/);
-		try {
-			run(command ?? '', args);
-		} catch (error) {
-			console.error(error instanceof Error ? error.message : error);
-		}
-		rl.prompt();
-	});
-
-	rl.on('close', () => {
-		void server.stop().then(() => process.exit(0));
-	});
 } else {
-	console.log('(no terminal attached: interactive commands are disabled)');
-	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-		process.on(signal, () => {
-			void server.stop().then(() => process.exit(0));
-		});
+	console.log('(no terminal attached: commands are still read from stdin)');
+}
+
+rl.on('line', (line) => {
+	const [command, ...args] = line.trim().split(/\s+/);
+	try {
+		run(command ?? '', args);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : error);
 	}
+	if (interactive) rl.prompt();
+});
+
+rl.on('close', () => {
+	if (interactive) shutdown();
+});
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+	process.on(signal, shutdown);
+}
+
+function shutdown(): void {
+	void server.stop().then(() => process.exit(0));
 }
 
 function run(command: string, args: string[]): void {
@@ -148,7 +159,7 @@ function run(command: string, args: string[]): void {
 
 		case 'quit':
 		case 'exit':
-			void server.stop().then(() => process.exit(0));
+			shutdown();
 			return;
 
 		default:

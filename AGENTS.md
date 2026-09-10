@@ -101,8 +101,11 @@ retrying only fills the log.
   and it aborts the handshake if the server does not echo a matching subprotocol. The mock
   therefore negotiates both. A JSON-only test double fails to connect at all, with the
   unhelpful message `Server sent no subprotocol`.
-- **There is no `svelte.config.js`.** The adapter and compiler options live in
-  `vite.config.ts` under the `sveltekit()` plugin.
+- **Svelte/Kit options live in `svelte.config.ts`, and `sveltekit()` in `vite.config.ts`
+  must stay argument-free.** Passing options to the plugin makes Kit ignore
+  `svelte.config.*` entirely (Kit ≥ 2.62), so the adapter would silently disappear and
+  the build would emit no `build/` directory. Note the shape differs between the two
+  places: in the standalone file the adapter belongs under `kit`, not at the top level.
 - **`vitest.config.ts` deliberately does not load the SvelteKit plugin** — everything under
   test is plain TypeScript — so `$lib` is aliased by hand there. Server modules read
   `process.env` directly rather than `$env/*` for the same reason.

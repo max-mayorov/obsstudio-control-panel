@@ -16,6 +16,7 @@
  */
 import { SSE_EVENT, type ObsSnapshot, type RecordingTick } from '$lib/types';
 import { ApiRequestError, api } from './api';
+import { RecordingClock } from './recording-clock';
 
 export interface Toast {
 	id: number;
@@ -45,13 +46,12 @@ export class ObsController {
 
 	private source: EventSource | undefined;
 	private timer: ReturnType<typeof setInterval> | undefined;
-	private sample = { durationMs: 0, at: 0 };
+	private readonly clock = new RecordingClock(now);
 	private nextToastId = 1;
 
 	constructor(initial: ObsSnapshot, authenticated: boolean) {
 		this.snapshot = initial;
-		this.displayMs = initial.recording.durationMs;
-		this.sample = { durationMs: initial.recording.durationMs, at: now() };
+		this.syncClock();
 		this.needsSignIn = !authenticated;
 	}
 
@@ -112,7 +112,8 @@ export class ObsController {
 			const snapshot = parse<ObsSnapshot>(event);
 			if (!snapshot) return;
 			this.snapshot = snapshot;
-			this.syncClock(snapshot.recording.durationMs, snapshot.recording.active);
+			this.clearControlsPending();
+			this.syncClock();
 		});
 
 		source.addEventListener(SSE_EVENT.tick, (event) => {
@@ -121,13 +122,19 @@ export class ObsController {
 			this.snapshot.recording.timecode = tick.timecode;
 			this.snapshot.recording.durationMs = tick.durationMs;
 			this.snapshot.recording.bytes = tick.bytes;
-			this.syncClock(tick.durationMs, true);
+			this.syncClock();
 		});
 
 		source.addEventListener('error', () => {
 			// EventSource reconnects by itself; reflect the gap rather than fighting it.
 			this.streamStatus = source.readyState === EventSource.CLOSED ? 'closed' : 'connecting';
 		});
+	}
+
+	private clearControlsPending() {
+		this.pending['start'] = false;
+		this.pending['stop'] = false;
+		this.pending['pause'] = false;
 	}
 
 	private closeStream(): void {
@@ -138,51 +145,27 @@ export class ObsController {
 
 	// ------------------------------------------------------- timecode clock
 
-	/**
-	 * Re-bases the local clock on a value from the server.
-	 *
-	 * Only an actually different duration re-bases. Every state snapshot carries the
-	 * recording numbers, so re-basing on all of them would rewind the display by up to a
-	 * sampling interval each time an unrelated thing changed — switching a scene during a
-	 * recording would visibly knock the timecode backwards.
-	 */
-	private syncClock(durationMs: number, active: boolean): void {
-		if (!active) {
-			this.sample = { durationMs: 0, at: now() };
-			this.displayMs = 0;
-			return;
-		}
-		if (durationMs === this.sample.durationMs) return;
-		this.sample = { durationMs, at: now() };
-		this.displayMs = durationMs;
+	private syncClock(): void {
+		this.clock.sync(this.snapshot.recording, this.snapshot.heartbeatMs > 0);
+		this.displayMs = this.clock.read();
 	}
 
 	private startInterpolation(): void {
 		if (this.timer) return;
 		this.timer = setInterval(() => {
-			const { active, paused } = this.snapshot.recording;
-			if (!active) {
-				this.displayMs = 0;
-				return;
-			}
-			// While paused, hold whatever is on screen and wait for the server's next
-			// sample to correct it. Recomputing from the last sample would jump the
-			// display backwards at the moment of pausing, then forwards again a second
-			// later when the authoritative value arrived.
-			if (paused) return;
-			this.displayMs = this.sample.durationMs + (now() - this.sample.at);
+			this.displayMs = this.clock.read();
 		}, INTERPOLATION_MS);
 	}
 
 	// ------------------------------------------------------------ commands
 
 	startRecording() {
-		return this.run('record', () => api.startRecording());
+		return this.run('start', () => api.startRecording());
 	}
 
 	stopRecording() {
 		return this.run(
-			'record',
+			'stop',
 			() => api.stopRecording(),
 			(result) => (result.outputPath ? `Saved ${result.outputPath}` : 'Recording stopped')
 		);
@@ -255,8 +238,6 @@ export class ObsController {
 			} else {
 				this.toast('error', 'Unexpected error');
 			}
-		} finally {
-			this.pending[key] = false;
 		}
 	}
 

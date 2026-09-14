@@ -39,10 +39,10 @@
 					type="button"
 					class="rounded-lg bg-live px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-live/90 focus-visible:outline-live disabled:cursor-not-allowed disabled:opacity-50"
 					{disabled}
-					aria-busy={controller.isPending('record')}
+					aria-busy={controller.isPending('stop')}
 					onclick={() => controller.stopRecording()}
 				>
-					{controller.isPending('record') ? 'Stopping…' : 'Stop recording'}
+					{controller.isPending('stop') ? 'Stopping…' : 'Stop recording'}
 				</button>
 				<button
 					type="button"
@@ -59,10 +59,10 @@
 					type="button"
 					class="rounded-lg bg-live px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-live/90 disabled:cursor-not-allowed disabled:opacity-50"
 					{disabled}
-					aria-busy={controller.isPending('record')}
+					aria-busy={controller.isPending('start')}
 					onclick={() => controller.startRecording()}
 				>
-					{controller.isPending('record') ? 'Starting…' : 'Start recording'}
+					{controller.isPending('start') ? 'Starting…' : 'Start recording'}
 				</button>
 			{/if}
 		</div>

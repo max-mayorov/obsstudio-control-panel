@@ -31,7 +31,7 @@ export interface ObsStoreSubscriber {
 	onTick(tick: RecordingTick): void;
 }
 
-function initialSnapshot(): ObsSnapshot {
+function initialSnapshot(heartbeatMs: number): ObsSnapshot {
 	return {
 		connection: { status: 'connecting', attempt: 0 },
 		recording: {
@@ -45,12 +45,13 @@ function initialSnapshot(): ObsSnapshot {
 			directory: null
 		},
 		scenes: { scenes: [], program: null, preview: null, studioMode: false, stale: true },
+		heartbeatMs,
 		serverTime: Date.now()
 	};
 }
 
 export class ObsStore {
-	private snapshot: ObsSnapshot = initialSnapshot();
+	private snapshot: ObsSnapshot;
 	private readonly subscribers = new Set<ObsStoreSubscriber>();
 	private readonly disposers: Array<() => void> = [];
 
@@ -64,7 +65,9 @@ export class ObsStore {
 	constructor(
 		private readonly client: ObsClient,
 		private readonly pollIntervalMs: number
-	) {}
+	) {
+		this.snapshot = initialSnapshot(pollIntervalMs);
+	}
 
 	getSnapshot(): ObsSnapshot {
 		return this.snapshot;

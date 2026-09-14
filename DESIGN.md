@@ -214,6 +214,21 @@ smooth — 10× the traffic for a worse answer. Interpolation halts while `pause
 `OBS_POLL_INTERVAL_MS` is configurable; `0` disables the loop and falls back to pure
 extrapolation.
 
+**The timecode is the file's, so it trails OBS's own clock by about a second.** OBS announces
+`Started` before the first frame reaches the file (the encoder warms up, the muxer waits for
+audio and video to line up), and `outputDuration` stays 0 until then. Measured on OBS 32.2
+with NVENC at 60 fps: 0 for ~1.1 s after `Started`, then a constant ~1.03 s behind wall clock,
+and every recording's log shows `Total frames output` 61 frames short of `Total drawn frames`.
+OBS's status bar counts from the start signal, so it leads the file by that much. We show the
+file's time, so a timecode read off our display is a position in the recording.
+
+Two consequences for the browser clock (`src/lib/client/recording-clock.ts`). A new recording
+holds at zero until OBS reports frames; counting from `Started` would run a second ahead and
+then snap back. And the clock re-bases on every active/paused transition in the snapshot, not
+on the command that caused it, so pressing Record or Resume in OBS itself behaves identically.
+The snapshot carries `heartbeatMs` because with the heartbeat off nothing would end that hold;
+the browser counts from `Started` instead.
+
 **Idle cost is zero:** the poll ticker runs only when a recording is active _and_ at least one
 SSE subscriber is attached.
 

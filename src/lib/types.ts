@@ -75,6 +75,11 @@ export interface ObsSnapshot {
 	connection: ConnectionState;
 	recording: RecordingState;
 	scenes: ScenesState;
+	/**
+	 * Interval of the server's recording heartbeat, or 0 when it is disabled and the
+	 * browser must extrapolate the timecode from the last snapshot alone.
+	 */
+	heartbeatMs: number;
 	/** Server wall clock, so the client can detect a badly skewed browser clock. */
 	serverTime: number;
 }
@@ -144,6 +149,7 @@ export function emptySnapshot(): ObsSnapshot {
 			directory: null
 		},
 		scenes: { scenes: [], program: null, preview: null, studioMode: false, stale: true },
+		heartbeatMs: 0,
 		serverTime: 0
 	};
 }

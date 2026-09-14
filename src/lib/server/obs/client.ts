@@ -131,10 +131,7 @@ export class ObsClient {
 		}
 
 		try {
-			log.info(
-				{ attempt: this.attempt, url: this.options.url, password: this.options.password },
-				'attempting to connect to OBS'
-			);
+			log.info({ attempt: this.attempt, url: this.options.url }, 'attempting to connect to OBS');
 			const hello = await this.obs.connect(this.options.url, this.options.password, {
 				eventSubscriptions: EVENT_SUBSCRIPTIONS,
 				rpcVersion: RPC_VERSION

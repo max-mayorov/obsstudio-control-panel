@@ -214,20 +214,27 @@ smooth — 10× the traffic for a worse answer. Interpolation halts while `pause
 `OBS_POLL_INTERVAL_MS` is configurable; `0` disables the loop and falls back to pure
 extrapolation.
 
-**The timecode is the file's, so it trails OBS's own clock by about a second.** OBS announces
-`Started` before the first frame reaches the file (the encoder warms up, the muxer waits for
-audio and video to line up), and `outputDuration` stays 0 until then. Measured on OBS 32.2
-with NVENC at 60 fps: 0 for ~1.1 s after `Started`, then a constant ~1.03 s behind wall clock,
-and every recording's log shows `Total frames output` 61 frames short of `Total drawn frames`.
-OBS's status bar counts from the start signal, so it leads the file by that much. We show the
-file's time, so a timecode read off our display is a position in the recording.
+**OBS's frame count trails its own clock by about a second, and it is late at every
+transition.** OBS counts a frame only once it leaves the encoder and muxer, not when it is
+captured. Measured on OBS 32.2 with NVENC at 60 fps: `outputDuration` stays 0 for ~1.1 s after
+`Started`, then runs a constant ~1.03 s behind wall clock. After a pause it keeps rising for
+about a second as the pipeline drains (8049 → 9033 → 9516 ms), and after a resume it can take
+half a second to move again. OBS's status bar counts from the start signal instead, so it
+reads about a second ahead of us. We keep the frame count: it is the file's timeline, and
+under overload it is the only one that stays truthful.
 
-Two consequences for the browser clock (`src/lib/client/recording-clock.ts`). A new recording
-holds at zero until OBS reports frames; counting from `Started` would run a second ahead and
-then snap back. And the clock re-bases on every active/paused transition in the snapshot, not
-on the command that caused it, so pressing Record or Resume in OBS itself behaves identically.
-The snapshot carries `heartbeatMs` because with the heartbeat off nothing would end that hold;
-the browser counts from `Started` instead.
+What this means for the browser clock (`src/lib/client/recording-clock.ts`):
+
+- **It never snaps to a sample.** Snapping turned each late sample into a visible jump:
+  forward a second after pausing, backwards after resuming. The display runs between 0.5× and
+  1.5× real time until it converges on OBS, so it never goes backwards and never leaps. It
+  jumps only when more than 2 s off, for example on joining a recording in progress.
+- **It freezes the moment the snapshot says paused**, whatever OBS counts afterwards.
+- **It re-bases on every active/paused transition in the snapshot**, not on the command that
+  caused it, so pressing Record or Resume in OBS itself behaves identically.
+- **A new recording's target holds at zero until OBS reports frames.** The snapshot carries
+  `heartbeatMs` because with the heartbeat off nothing would end that hold; the browser then
+  counts from `Started` instead.
 
 **Idle cost is zero:** the poll ticker runs only when a recording is active _and_ at least one
 SSE subscriber is attached.

@@ -25,8 +25,11 @@ export interface Toast {
 	requestId?: string;
 }
 
-/** How often the interpolated timecode is refreshed between server samples. */
-const INTERPOLATION_MS = 100;
+/**
+ * How often the interpolated timecode is refreshed between server samples. Short enough
+ * that even while the clock catches up at 1.5× the tenths digit never skips a step.
+ */
+const INTERPOLATION_MS = 50;
 
 const TOAST_TTL_MS = 6000;
 

@@ -129,3 +129,6 @@ failure also appears in the server log line for it.
 
 Tests live beside the unit they cover (`*.test.ts`) for pure logic, and in `tests/` for
 anything that drives the mock over a real socket.
+
+Write a comment only when it carries context the code itself can't — a non-obvious reason,
+a constraint, a gotcha. Otherwise don't write one.

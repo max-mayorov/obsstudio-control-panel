@@ -7,7 +7,14 @@
  * how the real-time behaviour is demonstrated without touching OBS.
  */
 import { createInterface } from 'node:readline';
+import { loadEnvFile } from 'node:process';
 import { MockObsServer } from './server.js';
+
+// Run standalone via tsx, so nothing else loads .env onto process.env. Missing file is
+// fine — the mock works with no auth by default.
+try {
+	loadEnvFile();
+} catch {}
 
 const HELP = `
 Commands

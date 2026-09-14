@@ -131,6 +131,10 @@ export class ObsClient {
 		}
 
 		try {
+			log.info(
+				{ attempt: this.attempt, url: this.options.url, password: this.options.password },
+				'attempting to connect to OBS'
+			);
 			const hello = await this.obs.connect(this.options.url, this.options.password, {
 				eventSubscriptions: EVENT_SUBSCRIPTIONS,
 				rpcVersion: RPC_VERSION
@@ -176,8 +180,8 @@ export class ObsClient {
 		this.clearRetry();
 		this.setState({ status: 'error', kind: 'auth', message });
 		log.error(
-			{ url: this.options.url },
-			'OBS rejected the websocket password — not retrying, fix OBS_PASSWORD and restart'
+			{ url: this.options.url, message },
+			'OBS rejected the websocket password - not retrying, fix OBS_PASSWORD and restart'
 		);
 	}
 

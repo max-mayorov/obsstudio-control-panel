@@ -8,6 +8,7 @@
 
 	const recording = $derived(controller.recording);
 	const disabled = $derived(!controller.online);
+	const connection = $derived(controller.connection);
 </script>
 
 <section class="rounded-xl border border-edge bg-panel p-5 sm:p-6">
@@ -26,7 +27,7 @@
 				</h2>
 			</div>
 			<div class="mt-3">
-				<Timecode ms={controller.displayMs} dimmed={!recording.active} />
+				<Timecode ms={controller.displayMs} dimmed={!recording.active || connection.status !== 'connected'} />
 			</div>
 			<p class="mt-2 text-xs text-faint" aria-live="polite">
 				{recording.active ? formatBytes(recording.bytes) : 'Ready'}

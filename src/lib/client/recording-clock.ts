@@ -1,6 +1,6 @@
 import type { RecordingState } from '$lib/types';
 
-type Sample = Pick<RecordingState, 'active' | 'paused' | 'durationMs'>;
+type Sample = Pick<RecordingState, 'active' | 'paused' | 'stale' | 'durationMs'>;
 
 /** While absorbing a correction the display runs between 0.5× and 1.5× real time. */
 const MAX_SLEW = 0.5;
@@ -35,6 +35,7 @@ const SNAP_MS = 2000;
 export class RecordingClock {
 	private active = false;
 	private paused = false;
+	private stale = true;
 	private awaitingFrames = false;
 	/** The last duration OBS reported, to tell a new sample from a repeated one. */
 	private reportedMs = 0;
@@ -72,14 +73,16 @@ export class RecordingClock {
 		if (!this.active) {
 			this.active = true;
 			this.paused = sample.paused;
+			this.stale = sample.stale;
 			this.awaitingFrames = sampled && sample.durationMs === 0;
 			this.rebase(sample.durationMs, now);
 			return;
 		}
 
-		if (sample.paused !== this.paused) {
+		if (sample.paused !== this.paused || sample.stale !== this.stale) {
 			this.rebase(this.shownMs, now);
 			this.paused = sample.paused;
+			this.stale = sample.stale;
 		}
 
 		if (fresh) {
@@ -91,7 +94,7 @@ export class RecordingClock {
 	/** OBS's duration as of `now`: the last sample, advanced by the time since. */
 	position(now = this.now()): number {
 		if (!this.active) return 0;
-		if (this.paused || this.awaitingFrames) return this.baseMs;
+		if (this.paused || this.stale || this.awaitingFrames) return this.baseMs;
 		return this.baseMs + (now - this.baseAt);
 	}
 
@@ -101,7 +104,7 @@ export class RecordingClock {
 		this.shownAt = now;
 
 		if (!this.active) return (this.shownMs = 0);
-		if (this.paused) return this.shownMs;
+		if (this.paused || this.stale) return this.shownMs;
 
 		const target = this.position(now);
 		const unhurried = this.shownMs + elapsed;

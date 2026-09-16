@@ -96,8 +96,7 @@ export class ObsController {
 
 	stop(): void {
 		this.closeStream();
-		if (this.timer) clearInterval(this.timer);
-		this.timer = undefined;
+		this.stopInterpolation();
 	}
 
 	private openStream(): void {
@@ -158,6 +157,11 @@ export class ObsController {
 		this.timer = setInterval(() => {
 			this.displayMs = this.clock.read();
 		}, INTERPOLATION_MS);
+	}
+
+	private stopInterpolation(): void {
+		if (this.timer) clearInterval(this.timer);
+		this.timer = undefined;
 	}
 
 	// ------------------------------------------------------------ commands

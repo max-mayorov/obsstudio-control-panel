@@ -4,9 +4,10 @@ import { RecordingClock } from './recording-clock';
 let time: number;
 let clock: RecordingClock;
 
-const idle = { active: false, paused: false, durationMs: 0 };
-const running = (durationMs: number) => ({ active: true, paused: false, durationMs });
-const paused = (durationMs: number) => ({ active: true, paused: true, durationMs });
+const idle = { active: false, paused: false, stale: false, durationMs: 0 };
+const running = (durationMs: number) => ({ active: true, paused: false, stale: false, durationMs });
+const paused = (durationMs: number) => ({ active: true, paused: true, stale: false, durationMs });
+const stale = (durationMs: number) => ({ active: true, paused: false, stale: true, durationMs });
 
 /** Advances time in animation-sized steps, reading the display as the page would. */
 function play(ms: number, step = 100): number[] {
@@ -74,6 +75,14 @@ describe('RecordingClock position', () => {
 		clock.sync(paused(5_620), true);
 		expect(clock.position()).toBe(5_620);
 	});
+
+	it('holds its position while the recording state is stale', () => {
+		clock.sync(running(5_000), true);
+		time += 600;
+		clock.sync(stale(5_000), true);
+		time += 5_000;
+		expect(clock.position()).toBe(5_600);
+	});
 });
 
 describe('RecordingClock display', () => {
@@ -130,6 +139,19 @@ describe('RecordingClock display', () => {
 
 		clock.sync(running(6_100), true);
 		expect(play(300).at(-1)).toBeCloseTo(5_900);
+	});
+
+	it('resumes from the value on screen when a stale recording becomes fresh', () => {
+		clock.sync(running(5_000), true);
+		clock.read();
+		play(600);
+		clock.sync(stale(5_000), true);
+		const frozen = clock.read();
+		play(30_000);
+		clock.sync(stale(6_100), true);
+
+		clock.sync(running(6_100), true);
+		expect(play(300).at(-1)).toBeCloseTo(frozen + 300);
 	});
 
 	it('returns to zero when the recording stops', () => {

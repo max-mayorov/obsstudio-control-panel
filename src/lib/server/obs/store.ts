@@ -37,6 +37,7 @@ function initialSnapshot(heartbeatMs: number): ObsSnapshot {
 		recording: {
 			active: false,
 			paused: false,
+			stale: true,
 			timecode: ZERO_TIMECODE,
 			durationMs: 0,
 			bytes: 0,
@@ -151,16 +152,17 @@ export class ObsStore {
 	// ------------------------------------------------------------ connection
 
 	private onConnectionChange(connection: ConnectionState): void {
+		log.info({ connection }, 'Connection state changed');
 		this.patch({ connection });
-
 		if (connection.status === 'connected') {
-			void this.resync();
+			this.resync();
 			return;
 		}
 
 		// Keep the last known scene list on screen but mark it stale, so the UI can grey
 		// it out instead of flashing empty every time OBS restarts.
 		this.patchScenes({ stale: true });
+		this.patchRecording({ stale: true });
 		this.updateTicker();
 	}
 
@@ -200,6 +202,7 @@ export class ObsStore {
 					directory: profile.directory,
 					active: status.outputActive,
 					paused: status.outputPaused,
+					stale: false,
 					timecode: status.outputTimecode,
 					durationMs: status.outputDuration,
 					bytes: status.outputBytes,

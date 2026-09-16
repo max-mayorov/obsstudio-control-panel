@@ -43,6 +43,8 @@ export interface CompletedRecording {
 export interface RecordingState {
 	active: boolean;
 	paused: boolean;
+	/** True while disconnected: the UI keeps showing the last known recording, greyed out. */
+	stale: boolean;
 	/** Formatted by OBS, e.g. "00:01:23.456". */
 	timecode: string;
 	durationMs: number;
